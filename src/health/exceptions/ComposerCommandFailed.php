@@ -5,7 +5,7 @@ namespace webhubworks\ohdear\health\exceptions;
 use Exception;
 use Symfony\Component\Process\Process;
 
-class ComposerCommandFailed extends Exception
+class ComposerCommandFailed extends Exception implements IndicatesTransientFailure
 {
     public static function invalidJsonOutput(Process $process, string $label): self
     {

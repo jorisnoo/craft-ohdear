@@ -24,42 +24,33 @@ class CveCheck extends Check implements Cacheable
 
     /**
      * @throws Exception
+     * @throws ComposerCommandFailed
      */
     protected function compute(): CheckResult
     {
-        try {
-            $auditResult = $this->getAuditResult();
-            $advisoriesPerPackage = $auditResult['advisories'] ?? [];
+        $auditResult = $this->getAuditResult();
+        $advisoriesPerPackage = $auditResult['advisories'] ?? [];
 
-            $advisoriesPerPackage = collect($advisoriesPerPackage)->map(function (array $advisories, string $packageName) {
+        $advisoriesPerPackage = collect($advisoriesPerPackage)->map(function (array $advisories, string $packageName) {
 
-                $whyResult = $this->getWhyResult($packageName);
-                $packageInformation = $this->getPackageInformation($packageName);
+            $whyResult = $this->getWhyResult($packageName);
+            $packageInformation = $this->getPackageInformation($packageName);
 
-                $requiredByPackage = $whyResult[0];
-                $requiredByPackageVersion = $whyResult[1];
-                $installedVersionConstraint = trim($whyResult[4], "()");
-                $installedVersion = $packageInformation['versions'][0] ?? null;
+            $requiredByPackage = $whyResult[0];
+            $requiredByPackageVersion = $whyResult[1];
+            $installedVersionConstraint = trim($whyResult[4], "()");
+            $installedVersion = $packageInformation['versions'][0] ?? null;
 
-                return [
-                    'advisories' => $advisories,
-                    'installedVersion' => $installedVersion,
-                    'installedVersionConstraint' => $installedVersionConstraint,
-                    'requiredBy' => [
-                        'packageName' => $requiredByPackage,
-                        'installedVersion' => $requiredByPackageVersion,
-                    ]
-                ];
-            });
-        } catch (ComposerCommandFailed $e) {
-            return new CheckResult(
-                name: 'SecurityVulnerabilities',
-                label: 'Security Vulnerabilities',
-                notificationMessage: $e->getMessage(),
-                shortSummary: 'Check could not run',
-                status: CheckResult::STATUS_WARNING,
-            );
-        }
+            return [
+                'advisories' => $advisories,
+                'installedVersion' => $installedVersion,
+                'installedVersionConstraint' => $installedVersionConstraint,
+                'requiredBy' => [
+                    'packageName' => $requiredByPackage,
+                    'installedVersion' => $requiredByPackageVersion,
+                ]
+            ];
+        });
 
         return (new CheckResult(
             name: 'SecurityVulnerabilities',

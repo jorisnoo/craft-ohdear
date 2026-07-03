@@ -22,6 +22,13 @@ trait RunsComposer
     private static array $auditResultMemo = [];
 
     /**
+     * Seconds to wait before the single in-process retry of `composer audit`.
+     * The audit is the only composer call here that hits the network, and
+     * Packagist blips are usually shorter than this.
+     */
+    private static int $auditRetryDelaySeconds = 5;
+
+    /**
      * @throws Exception
      * @throws ComposerCommandFailed
      */
@@ -33,12 +40,27 @@ trait RunsComposer
             return self::$auditResultMemo[$jsonPath];
         }
 
+        try {
+            return self::$auditResultMemo[$jsonPath] = $this->runAudit($jsonPath);
+        } catch (ComposerCommandFailed) {
+            sleep(self::$auditRetryDelaySeconds);
+
+            return self::$auditResultMemo[$jsonPath] = $this->runAudit($jsonPath);
+        }
+    }
+
+    /**
+     * @throws Exception
+     * @throws ComposerCommandFailed
+     */
+    private function runAudit(string $jsonPath): array
+    {
         $auditCommand = $this->runComposerCommand(
             $jsonPath,
             ['--format=json', 'audit'],
         );
 
-        return self::$auditResultMemo[$jsonPath] = $this->decodeJsonOutput($auditCommand, 'composer audit');
+        return $this->decodeJsonOutput($auditCommand, 'composer audit');
     }
 
     /**

@@ -7,6 +7,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use OhDear\HealthCheckResults\CheckResult;
 use Throwable;
+use webhubworks\ohdear\health\exceptions\IndicatesTransientFailure;
 
 /**
  * Read-from-cache behavior for checks whose results are refreshed
@@ -40,12 +41,16 @@ trait CachesResult
     final public function run(): CheckResult
     {
         if ($this->staleAfterSeconds === null) {
-            return $this->compute();
+            try {
+                return $this->compute();
+            } catch (IndicatesTransientFailure $e) {
+                return $this->couldNotRunResult($e);
+            }
         }
 
-        $cached = Craft::$app->getCache()->get($this->getCacheKey());
+        $cached = $this->getValidCachedEntry();
 
-        if (!is_array($cached) || !($cached['result'] ?? null) instanceof CheckResult) {
+        if ($cached === null) {
             return $this->notYetComputedResult();
         }
 
@@ -60,15 +65,32 @@ trait CachesResult
         return $this->annotateWithComputedAt($result, $computedAt);
     }
 
+    /**
+     * @throws IndicatesTransientFailure when compute failed transiently. A
+     * previously cached result is left in place (with its TTL renewed, so it
+     * survives until the next refresh attempt); staleness is still measured
+     * from the last successful compute, so persistent failures surface as a
+     * stale warning after staleAfterSeconds.
+     */
     public function refresh(): CheckResult
     {
-        $result = $this->compute();
+        try {
+            $result = $this->compute();
+        } catch (IndicatesTransientFailure $e) {
+            $cached = $this->getValidCachedEntry();
 
-        Craft::$app->getCache()->set(
-            $this->getCacheKey(),
-            ['result' => $result, 'computedAt' => time()],
-            $this->staleAfterSeconds !== null ? $this->staleAfterSeconds * 2 : 86400,
-        );
+            if ($cached === null) {
+                // Nothing to fall back on: cache the failure so the endpoint
+                // reports "could not run" instead of "not yet computed".
+                $this->storeInCache($this->couldNotRunResult($e), time());
+            } else {
+                $this->storeInCache($cached['result'], (int) ($cached['computedAt'] ?? 0));
+            }
+
+            throw $e;
+        }
+
+        $this->storeInCache($result, time());
 
         return $result;
     }
@@ -90,6 +112,40 @@ trait CachesResult
     private function getCacheKey(): string
     {
         return 'ohdear-check-result:' . $this->checkResultName();
+    }
+
+    /**
+     * @return array{result: CheckResult, computedAt: mixed}|null
+     */
+    private function getValidCachedEntry(): ?array
+    {
+        $cached = Craft::$app->getCache()->get($this->getCacheKey());
+
+        if (!is_array($cached) || !($cached['result'] ?? null) instanceof CheckResult) {
+            return null;
+        }
+
+        return $cached;
+    }
+
+    private function storeInCache(CheckResult $result, int $computedAt): void
+    {
+        Craft::$app->getCache()->set(
+            $this->getCacheKey(),
+            ['result' => $result, 'computedAt' => $computedAt],
+            $this->staleAfterSeconds !== null ? $this->staleAfterSeconds * 2 : 86400,
+        );
+    }
+
+    private function couldNotRunResult(IndicatesTransientFailure $e): CheckResult
+    {
+        return new CheckResult(
+            name: $this->checkResultName(),
+            label: $this->checkResultLabel(),
+            notificationMessage: $e->getMessage(),
+            shortSummary: 'Check could not run',
+            status: CheckResult::STATUS_WARNING,
+        );
     }
 
     private function notYetComputedResult(): CheckResult

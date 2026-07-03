@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## 5.7.3 - 2026-07-03
+
+### Changed
+- Cron-cached health checks (`cachedViaCron`) no longer overwrite their cached result when the underlying composer command fails transiently (e.g. a Packagist timeout during `composer audit`). The last good result is kept, its cache TTL is renewed, and the next scheduled refresh retries. Staleness is still measured from the last successful compute, so persistent failures surface as a stale warning after `staleAfterSeconds`.
+- `craft ohdear/health-check/refresh` reports a transient refresh failure as a warning but exits 0 (the cached result was kept and the next run retries), so cron heartbeats keep pinging. Unexpected errors still exit non-zero.
+- `composer audit` is retried once after a 5-second pause before a failure is propagated, absorbing short Packagist blips within a single refresh run.
+
+### Added
+- New `IndicatesTransientFailure` marker interface (implemented by `ComposerCommandFailed`) that controls the keep-last-good-result behavior.
+
 ## 5.7.2 - 2026-06-15
 
 ### Fixed

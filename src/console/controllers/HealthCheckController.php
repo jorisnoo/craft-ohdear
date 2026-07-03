@@ -5,6 +5,7 @@ namespace webhubworks\ohdear\console\controllers;
 use craft\helpers\Console;
 use Throwable;
 use webhubworks\ohdear\health\checks\Cacheable;
+use webhubworks\ohdear\health\exceptions\IndicatesTransientFailure;
 use webhubworks\ohdear\OhDear;
 use yii\console\Controller;
 use yii\console\ExitCode;
@@ -41,6 +42,12 @@ class HealthCheckController extends Controller
                 $elapsed = microtime(true) - $start;
                 $this->stdout('✓ ', Console::FG_GREEN);
                 $this->stdout(sprintf("Refreshed %s in %.2fs" . PHP_EOL, $name, $elapsed));
+            } catch (IndicatesTransientFailure $e) {
+                // The check kept its last cached result and the next scheduled
+                // run retries, so this is not a hard failure. Exiting OK also
+                // keeps the cron heartbeat pinging.
+                $this->stdout('⚠ ', Console::FG_YELLOW);
+                $this->stdout(sprintf("Kept cached result for %s, refresh failed: %s" . PHP_EOL, $name, $e->getMessage()));
             } catch (Throwable $e) {
                 $hadFailure = true;
                 $this->stdout('✗ ', Console::FG_RED);
