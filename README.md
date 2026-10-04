@@ -97,3 +97,7 @@ This plugin is independent from Oh Dear. You can see all available 3rd party int
 Starting at version 4 the version number will correspond to the Craft version that the plugin runs on. Craft Oh Dear 2 requires Craft 3 and Craft Oh Dear 3 does not exist. New features will only be available in Craft Oh Dear 5 which requires Craft 5.
 
 Brought to you by [webhub](https://webhub.de)
+
+## Maintainer releases
+
+See [RELEASING.md](RELEASING.md) for versioning, changelog entries and the release command.
